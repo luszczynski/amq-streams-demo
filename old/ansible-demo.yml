@@ -1,0 +1,103 @@
+---
+- hosts: localhost
+  name: "AMQ Streams Setup"
+  connection: local
+  vars:
+    strimzi_version: 0.8.2
+    openshift_project: myproject
+
+  tasks:
+
+    - name: Get minishift ip
+      shell: minishift ip
+      register: minishift_ip
+
+    - name: Login
+      shell: oc login {{ minishift_ip.stdout }}:8443 -u admin -p admin
+
+    - name: Kafka Basics
+      pause:
+        prompt: |
+          ======================================================
+          KAFKA BASICS
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Get Kafka Cluster
+      pause:
+        prompt: |
+          ======================================================
+          oc get kafka
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Get Kafka Topics
+      pause:
+        prompt: |
+          ======================================================
+          oc get kafkatopics
+
+          or
+
+          oc exec -it my-cluster-zookeeper-0 -c zookeeper -- bin/kafka-topics.sh --zookeeper localhost:21810 --list
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Create Kafka Topic
+      pause:
+        prompt: |
+          ======================================================
+          oc create -f /tmp/strimzi-{{ strimzi_version }}/examples/topic/kafka-topic.yaml
+
+          oc exec -it my-cluster-zookeeper-0 -c zookeeper -- bin/kafka-topics.sh --zookeeper localhost:21810 --create --topic created-in-kafka --partitions 1 --replication-factor 1
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Delete Kafka Topic
+      pause:
+        prompt: |
+          ======================================================
+          oc exec -it my-cluster-zookeeper-0 -c zookeeper -- bin/kafka-topics.sh --zookeeper localhost:21810 --delete --topic created-in-kafka
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Producing and Consuming messages
+      pause:
+        prompt: |
+          ======================================================
+          
+          Producer
+          ========
+          oc run --rm kafka-producer -ti --image=strimzi/kafka:{{ strimzi_version }} --restart=Never -- bin/kafka-console-producer.sh --broker-list my-cluster-kafka-bootstrap:9092 --topic my-topic
+
+          Consumer
+          ========
+          oc run --rm kafka-consumer -ti --image=strimzi/kafka:{{ strimzi_version }} --restart=Never -- bin/kafka-console-consumer.sh --bootstrap-server my-cluster-kafka-bootstrap:9092 --topic my-topic --from-beginning
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Kafka Streams
+      pause:
+        prompt: |
+          ======================================================
+          KAFKA STREAMS
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Create Topic 
+      pause:
+        prompt: |
+          ======================================================
+          oc exec -it my-cluster-zookeeper-0 -c zookeeper -- bin/kafka-topics.sh --zookeeper localhost:21810 --create --topic streams-plaintext-input --partitions 1 --replication-factor 1
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+    
+

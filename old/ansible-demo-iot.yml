@@ -1,0 +1,117 @@
+---
+- hosts: localhost
+  name: "AMQ Streams Demo IoT"
+  connection: local
+  vars:
+    strimzi_version: 0.8.2
+    openshift_project: myproject
+
+  tasks:
+
+    - name: Get minishift ip
+      shell: minishift ip
+      register: minishift_ip
+
+    - name: Set MacOSX facts
+      set_fact:
+        nav: open
+      when: ansible_distribution == "MacOSX"
+
+    - name: Set Linux facts
+      set_fact:
+        nav: firefox
+      when: ansible_distribution != "MacOSX"
+
+    - name: Login
+      shell: oc login {{ minishift_ip.stdout }}:8443 -u admin -p admin
+
+    - name: Cloning repo strimzi-lab
+      git:
+        repo: https://github.com/luszczynski/strimzi-lab.git
+        dest: /tmp/strimzi-lab
+        force: yes
+
+    - name: Create topics
+      pause:
+        prompt: |
+          ======================================================
+          Topic 01: iot-temperature
+          Topic 02: iot-temperature-max
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+    
+    - name: Creating topics
+      shell: oc apply -f {{ item }} -n {{ openshift_project }}
+      with_items:
+        - /tmp/strimzi-lab/iot-demo/stream-app/resources/topic-temperature.yml
+        - /tmp/strimzi-lab/iot-demo/stream-app/resources/topic-temperature-max.yml
+
+    - name: Show topics
+      pause:
+        prompt: |
+          ======================================================
+          oc get kafkatopics
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Create consumer app (consumer Web App)
+      pause:
+        prompt: |
+          ======================================================
+          Topic: iot-temperature-max
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Creating consumer app
+      shell: oc apply -f /tmp/strimzi-lab/iot-demo/consumer-app/resources/consumer-app.yml -n {{ openshift_project }}
+
+    - name: Wait consumer app to be ready
+      shell: "oc get po --no-headers -l app=iot-demo -n {{ openshift_project }} | grep Running"
+      register: consumer_result
+      until: consumer_result.stdout.find("Running") != -1
+      retries: 60
+      delay: 5
+
+    - name: Opening consumer app
+      shell: "{{ nav }} $(minishift openshift service consumer-app -u)"
+
+    - name: Create stream app (consumer and producer)
+      pause:
+        prompt: |
+          ======================================================
+          Topic:
+            - iot-temperature
+            - iot-temperature-max
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+        
+    - name: Creating stream app
+      shell: oc apply -f /tmp/strimzi-lab/iot-demo/stream-app/resources/stream-app.yml -n {{ openshift_project }}
+
+    - name: Create device app (producer)
+      pause:
+        prompt: |
+          ======================================================
+          Create device app (producer)
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+    
+    - name: Creating device app
+      shell: oc apply -f /tmp/strimzi-lab/iot-demo/device-app/resources/device-app.yml -n {{ openshift_project }}
+
+    - name: Scale device app
+      pause:
+        prompt: |
+          ======================================================
+          Scaling to 5
+
+          PRESS ENTER TO CONTINUE
+          ======================================================
+
+    - name: Scaling device app
+      shell: oc scale deployment device-app --replicas=5 -n {{ openshift_project }}

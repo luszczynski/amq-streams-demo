@@ -1,0 +1,56 @@
+---
+- hosts: localhost
+  name: "AMQ Streams Setup"
+  connection: local
+  vars:
+    strimzi_version: 0.8.2
+    openshift_project: myproject
+
+  tasks:
+
+    - name: Creating minishift profile
+      shell: minishift profile set amq-streams
+
+    - name: Setting Minishift 8GB, 2 CPUs and image caching
+      shell: "minishift config set {{ item }} --profile amq-streams"
+      with_items:
+        - "memory 8GB"
+        - "cpus 2"
+        - "image-caching true"
+
+    - name: Configurando Minishift addons
+      shell: "minishift addon enable {{ item }}"
+      with_items:
+        - admin-user
+        - anyuid
+
+    - name: Starting minishift...
+      shell: minishift --profile amq-streams start
+
+    - name: Get minishift ip
+      shell: minishift ip
+      register: minishift_ip
+
+    - name: Login
+      shell: oc login {{ minishift_ip.stdout }}:8443 -u admin -p admin
+
+    - name: Strimzi Download
+      get_url: 
+        url: https://github.com/strimzi/strimzi-kafka-operator/releases/download/{{ strimzi_version }}/strimzi-{{ strimzi_version }}.zip
+        dest: /tmp/strimzi.zip
+
+    - name: Unzip Strimzi
+      unarchive:
+        src: /tmp/strimzi.zip
+        dest: /tmp
+    
+    - name: Update yamls
+      shell: "sed -i 's/namespace: .*/namespace: {{ openshift_project }}/' /tmp/strimzi-{{ strimzi_version }}/install/cluster-operator/*RoleBinding*.yaml"
+
+    - name: Installing Kafka operator
+      shell: "oc apply -f {{ item }} -n myproject"
+      with_items:
+        - /tmp/strimzi-{{ strimzi_version }}/install/cluster-operator
+        - /tmp/strimzi-{{ strimzi_version }}/examples/templates/cluster-operator
+        - /tmp/strimzi-{{ strimzi_version }}/examples/kafka/kafka-ephemeral.yaml
+        - /tmp/strimzi-{{ strimzi_version }}/examples/kafka-connect/kafka-connect.yaml
